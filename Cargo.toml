@@ -1,0 +1,17 @@
+[package]
+name = "vox"
+version = "0.1.0"
+edition = "2021"
+description = "Push-to-talk dictation — toggle key, Whisper ONNX, paste at cursor"
+
+[[bin]]
+name = "vox"
+path = "src/main.rs"
+
+[dependencies]
+sherpa-onnx = { version = "1", features = ["static"] }
+cpal = "0.15"
+evdev = "0.12"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
