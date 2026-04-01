@@ -8,14 +8,14 @@ fn main() {
 
     let mut config = OfflineRecognizerConfig::default();
     config.model_config.whisper = OfflineWhisperModelConfig {
-        encoder: Some(format!("{base}/small-encoder.onnx")),
-        decoder: Some(format!("{base}/small-decoder.onnx")),
+        encoder: Some(format!("{base}/turbo-encoder.int8.onnx")),
+        decoder: Some(format!("{base}/turbo-decoder.int8.onnx")),
         language: Some("fr".into()),
         task: Some("transcribe".into()),
         tail_paddings: -1,
         ..Default::default()
     };
-    config.model_config.tokens = Some(format!("{base}/small-tokens.txt"));
+    config.model_config.tokens = Some(format!("{base}/turbo-tokens.txt"));
     config.model_config.num_threads = 4;
     config.model_config.debug = false;
 

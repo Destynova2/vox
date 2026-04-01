@@ -1,5 +1,6 @@
 mod audio;
 mod keys;
+mod models;
 mod stt;
 mod tray;
 mod uinput;
@@ -7,41 +8,23 @@ mod uinput;
 use anyhow::{Context, Result};
 use clap::Parser;
 use evdev::Key;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(name = "vox", about = "Push-to-talk dictation — toggle key, Whisper ONNX, type at cursor")]
 struct Cli {
-    /// Whisper ONNX encoder model path
-    #[arg(long, default_value = "~/.local/share/whisper-onnx/small-encoder.onnx")]
-    encoder: String,
-
-    /// Whisper ONNX decoder model path
-    #[arg(long, default_value = "~/.local/share/whisper-onnx/small-decoder.onnx")]
-    decoder: String,
-
-    /// Tokens file path
-    #[arg(long, default_value = "~/.local/share/whisper-onnx/small-tokens.txt")]
-    tokens: String,
-
     /// Language for transcription
     #[arg(short, long, default_value = "fr")]
     language: String,
 
+    /// Whisper model name (e.g. turbo-int8, small, medium, large-v3-int8)
+    #[arg(short, long, default_value = "turbo-int8")]
+    model: String,
+
     /// Debug mode: print all key events
     #[arg(long)]
     debug_keys: bool,
-}
-
-fn expand_path(p: &str) -> PathBuf {
-    if p.starts_with("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(p.replacen("~", &home, 1));
-        }
-    }
-    PathBuf::from(p)
 }
 
 fn main() -> Result<()> {
@@ -51,14 +34,12 @@ fn main() -> Result<()> {
         return keys::debug_keys();
     }
 
-    eprintln!("[vox] loading whisper ONNX...");
-    let whisper = stt::Whisper::new(
-        &expand_path(&cli.encoder),
-        &expand_path(&cli.decoder),
-        &expand_path(&cli.tokens),
-        &cli.language,
-    )
-    .context("failed to load whisper")?;
+    let model_config = models::ModelConfig::from_name(&cli.model);
+    let m = models::ensure_models(&model_config)?;
+
+    eprintln!("[vox] loading {} ...", cli.model);
+    let whisper = stt::Whisper::new(&m.encoder, &m.decoder, &m.tokens, &cli.language)
+        .context("failed to load whisper")?;
 
     eprintln!("[vox] ready — press ² to start/stop dictation");
 
@@ -73,12 +54,10 @@ fn main() -> Result<()> {
     let (tx, rx) = std::sync::mpsc::channel::<Action>();
     let tx = Arc::new(std::sync::Mutex::new(tx));
 
-    // Key listener thread
     std::thread::spawn(move || {
         if let Err(e) = keys::listen_toggle(Key::KEY_GRAVE, move |pressed| {
             if pressed {
                 uinput::send_backspace();
-
                 let was_recording = recording_key.fetch_xor(true, Ordering::SeqCst);
                 let action = if !was_recording { Action::Start } else { Action::Stop };
                 let _ = tx.lock().unwrap().send(action);

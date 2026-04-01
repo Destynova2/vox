@@ -1,6 +1,6 @@
 # vox
 
-Push-to-talk dictation tool. Press a key to record, press again to transcribe and type at cursor. Runs locally with Whisper ONNX, no cloud, no latency.
+Push-to-talk dictation. Press ² to record, press again to transcribe and type at cursor. Local Whisper, no cloud.
 
 ## How it works
 
@@ -8,43 +8,35 @@ Push-to-talk dictation tool. Press a key to record, press again to transcribe an
 ² (start) → record audio → ² (stop) → Whisper transcribes → text typed at cursor
 ```
 
-- **Audio**: cpal (16kHz mono, any ALSA/PipeWire device)
-- **STT**: Whisper small via sherpa-onnx (ONNX Runtime, ~2-3s for short utterances)
-- **Typing**: uinput virtual keyboard (AZERTY layout, works in any Wayland app including terminals)
-- **Hotkey**: evdev (listens on all keyboards, auto udev rule install)
+- **STT**: Whisper large-v3-turbo int8 via sherpa-onnx (~8% WER French, ~2s latency)
+- **Audio**: cpal (16kHz mono, ALSA/PipeWire)
+- **Typing**: uinput virtual keyboard (AZERTY, works in any Wayland app including terminals)
+- **Hotkey**: evdev (all keyboards, auto udev setup)
 
-## Requirements
-
-- Linux (Wayland)
-- PipeWire or ALSA audio input
-- Whisper ONNX models in `~/.local/share/whisper-onnx/`:
-  - `small-encoder.onnx`
-  - `small-decoder.onnx`
-  - `small-tokens.txt`
-
-Download models:
-```bash
-mkdir -p ~/.local/share/whisper-onnx && cd ~/.local/share/whisper-onnx
-curl -LO https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.onnx
-curl -LO https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.onnx
-curl -LO https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt
-```
-
-## Build
+## Install & run
 
 ```bash
-./build.sh
+cargo install --path .
+vox
 ```
 
-## Usage
+On first run, vox will:
+1. Download Whisper turbo int8 models (~1 GB) to `~/.local/share/whisper-onnx/`
+2. Install udev rules for `/dev/input` and `/dev/uinput` via pkexec (one-time)
+
+## Options
 
 ```bash
-./target/release/vox              # start (default: French, ² key)
-./target/release/vox -l en        # English
-./target/release/vox --debug-keys # show key codes to find your hotkey
+vox              # French (default)
+vox -l en        # English
+vox --debug-keys # show key codes
 ```
 
-On first run, if `/dev/input` or `/dev/uinput` are not accessible, vox will prompt via `pkexec` to install a udev rule.
+## Build from source
+
+```bash
+./build.sh       # sets linuxbrew PKG_CONFIG_PATH
+```
 
 ## License
 
