@@ -13,30 +13,34 @@ Push-to-talk dictation. Press ² to record, press again to transcribe and type a
 - **Typing**: uinput virtual keyboard (AZERTY, works in any Wayland app including terminals)
 - **Hotkey**: evdev (all keyboards, auto udev setup)
 
-## Install & run
+## Install
 
 ```bash
-cargo install --path .
-vox
+curl -L https://github.com/Destynova2/vox/releases/latest/download/vox-linux-x86_64 -o ~/.local/bin/vox
+chmod +x ~/.local/bin/vox
 ```
 
 On first run, vox will:
 1. Download Whisper turbo int8 models (~1 GB) to `~/.local/share/whisper-onnx/`
 2. Install udev rules for `/dev/input` and `/dev/uinput` via pkexec (one-time)
 
-## Options
+## Usage
 
 ```bash
-vox              # French (default)
-vox -l en        # English
-vox --debug-keys # show key codes
+vox                # French (default)
+vox -l en          # English
+vox -m small       # use a different model (small, medium, turbo-int8...)
+vox --debug-keys   # show key codes
 ```
 
 ## Build from source
 
 ```bash
-./build.sh       # sets linuxbrew PKG_CONFIG_PATH
+make build    # auto-detects linuxbrew
+make install  # copies to ~/.local/bin/vox
 ```
+
+Requires `alsa-lib-devel` and a C++ compiler.
 
 ## License
 
