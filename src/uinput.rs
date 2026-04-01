@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use evdev::uinput::VirtualDeviceBuilder;
 use evdev::{AttributeSet, EventType, InputEvent, Key, uinput::VirtualDevice};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -54,12 +55,12 @@ pub fn send_backspace() {
     }
 }
 
-/// Type text character by character via uinput (AZERTY layout).
-pub fn type_text(text: &str) -> Result<()> {
+/// Type text character by character via uinput, using the detected keyboard layout.
+pub fn type_text(text: &str, layout: &Layout) -> Result<()> {
     get_or_create()?;
 
     for ch in text.chars() {
-        if let Some((key, shift)) = char_to_key(ch) {
+        if let Some((key, shift)) = layout.char_to_key(ch) {
             if shift {
                 emit_key(Key::KEY_LEFTSHIFT, true)?;
             }
@@ -69,123 +70,219 @@ pub fn type_text(text: &str) -> Result<()> {
                 emit_key(Key::KEY_LEFTSHIFT, false)?;
             }
         }
-        // Unknown chars are silently skipped
     }
 
     Ok(())
 }
 
-/// Map a character to (evdev Key, needs_shift) for French AZERTY layout.
-fn char_to_key(ch: char) -> Option<(Key, bool)> {
-    let (key, shift) = match ch {
-        // Space & newline
-        ' ' => (Key::KEY_SPACE, false),
-        '\n' => (Key::KEY_ENTER, false),
-        '\t' => (Key::KEY_TAB, false),
+// --- Keyboard layout detection & mapping ---
 
-        // Lowercase letters (AZERTY positions)
-        'a' => (Key::KEY_Q, false),
-        'b' => (Key::KEY_B, false),
-        'c' => (Key::KEY_C, false),
-        'd' => (Key::KEY_D, false),
-        'e' => (Key::KEY_E, false),
-        'f' => (Key::KEY_F, false),
-        'g' => (Key::KEY_G, false),
-        'h' => (Key::KEY_H, false),
-        'i' => (Key::KEY_I, false),
-        'j' => (Key::KEY_J, false),
-        'k' => (Key::KEY_K, false),
-        'l' => (Key::KEY_L, false),
-        'm' => (Key::KEY_SEMICOLON, false),
-        'n' => (Key::KEY_N, false),
-        'o' => (Key::KEY_O, false),
-        'p' => (Key::KEY_P, false),
-        'q' => (Key::KEY_A, false),
-        'r' => (Key::KEY_R, false),
-        's' => (Key::KEY_S, false),
-        't' => (Key::KEY_T, false),
-        'u' => (Key::KEY_U, false),
-        'v' => (Key::KEY_V, false),
-        'w' => (Key::KEY_Z, false),
-        'x' => (Key::KEY_X, false),
-        'y' => (Key::KEY_Y, false),
-        'z' => (Key::KEY_W, false),
+pub struct Layout {
+    map: HashMap<char, (Key, bool)>,
+    pub name: String,
+}
 
-        // Uppercase letters
-        'A' => (Key::KEY_Q, true),
-        'B' => (Key::KEY_B, true),
-        'C' => (Key::KEY_C, true),
-        'D' => (Key::KEY_D, true),
-        'E' => (Key::KEY_E, true),
-        'F' => (Key::KEY_F, true),
-        'G' => (Key::KEY_G, true),
-        'H' => (Key::KEY_H, true),
-        'I' => (Key::KEY_I, true),
-        'J' => (Key::KEY_J, true),
-        'K' => (Key::KEY_K, true),
-        'L' => (Key::KEY_L, true),
-        'M' => (Key::KEY_SEMICOLON, true),
-        'N' => (Key::KEY_N, true),
-        'O' => (Key::KEY_O, true),
-        'P' => (Key::KEY_P, true),
-        'Q' => (Key::KEY_A, true),
-        'R' => (Key::KEY_R, true),
-        'S' => (Key::KEY_S, true),
-        'T' => (Key::KEY_T, true),
-        'U' => (Key::KEY_U, true),
-        'V' => (Key::KEY_V, true),
-        'W' => (Key::KEY_Z, true),
-        'X' => (Key::KEY_X, true),
-        'Y' => (Key::KEY_Y, true),
-        'Z' => (Key::KEY_W, true),
+impl Layout {
+    pub fn detect() -> Self {
+        let name = detect_layout_name();
+        eprintln!("[layout] detected: {name}");
+        match name.as_str() {
+            "us" | "gb" | "en" => Self { map: qwerty_map(), name },
+            "de" | "at" | "ch" => Self { map: qwertz_map(), name },
+            _ => Self { map: azerty_map(), name }, // fr and default
+        }
+    }
 
-        // Punctuation (AZERTY)
-        ',' => (Key::KEY_M, false),
-        ';' => (Key::KEY_COMMA, false),
-        ':' => (Key::KEY_DOT, false),
-        '!' => (Key::KEY_SLASH, false),
-        '?' => (Key::KEY_M, true),
-        '.' => (Key::KEY_COMMA, true),
-        '/' => (Key::KEY_DOT, true),
-        '§' => (Key::KEY_SLASH, true),
+    pub fn char_to_key(&self, ch: char) -> Option<(Key, bool)> {
+        self.map.get(&ch).copied()
+    }
+}
 
-        // Number row (unshifted = symbols, shifted = digits on AZERTY)
-        '&' => (Key::KEY_1, false),
-        '1' => (Key::KEY_1, true),
-        'é' => (Key::KEY_2, false),
-        '2' => (Key::KEY_2, true),
-        '"' => (Key::KEY_3, false),
-        '3' => (Key::KEY_3, true),
-        '\'' => (Key::KEY_4, false),
-        '4' => (Key::KEY_4, true),
-        '(' => (Key::KEY_5, false),
-        '5' => (Key::KEY_5, true),
-        '-' => (Key::KEY_6, false),
-        '6' => (Key::KEY_6, true),
-        'è' => (Key::KEY_7, false),
-        '7' => (Key::KEY_7, true),
-        '_' => (Key::KEY_8, false),
-        '8' => (Key::KEY_8, true),
-        'ç' => (Key::KEY_9, false),
-        '9' => (Key::KEY_9, true),
-        'à' => (Key::KEY_0, false),
-        '0' => (Key::KEY_0, true),
-        ')' => (Key::KEY_MINUS, false),
-        '°' => (Key::KEY_MINUS, true),
-        '=' => (Key::KEY_EQUAL, false),
-        '+' => (Key::KEY_EQUAL, true),
+fn detect_layout_name() -> String {
+    // 1. GNOME/Wayland: dconf
+    if let Ok(out) = std::process::Command::new("dconf")
+        .args(["read", "/org/gnome/desktop/input-sources/sources"])
+        .output()
+    {
+        let s = String::from_utf8_lossy(&out.stdout);
+        // Format: [('xkb', 'fr')]
+        if let Some(start) = s.rfind("'") {
+            let before = &s[..start];
+            if let Some(begin) = before.rfind("'") {
+                let layout = &before[begin + 1..];
+                if !layout.is_empty() {
+                    return layout.to_string();
+                }
+            }
+        }
+    }
 
-        // Other common chars
-        'ù' => (Key::KEY_APOSTROPHE, false),
-        '%' => (Key::KEY_APOSTROPHE, true),
-        '*' => (Key::KEY_BACKSLASH, false),
-        'µ' => (Key::KEY_BACKSLASH, true),
-        '$' => (Key::KEY_RIGHTBRACE, false),
-        '£' => (Key::KEY_RIGHTBRACE, true),
-        '<' => (Key::KEY_102ND, false),
-        '>' => (Key::KEY_102ND, true),
+    // 2. localectl
+    if let Ok(out) = std::process::Command::new("localectl").arg("status").output() {
+        let s = String::from_utf8_lossy(&out.stdout);
+        for line in s.lines() {
+            if line.contains("X11 Layout:") {
+                if let Some(layout) = line.split(':').nth(1) {
+                    let l = layout.trim();
+                    if !l.is_empty() {
+                        return l.to_string();
+                    }
+                }
+            }
+        }
+    }
 
-        _ => return None,
-    };
-    Some((key, shift))
+    "fr".to_string()
+}
+
+fn common_map() -> HashMap<char, (Key, bool)> {
+    let mut m = HashMap::new();
+    m.insert(' ', (Key::KEY_SPACE, false));
+    m.insert('\n', (Key::KEY_ENTER, false));
+    m.insert('\t', (Key::KEY_TAB, false));
+    m
+}
+
+fn azerty_map() -> HashMap<char, (Key, bool)> {
+    let mut m = common_map();
+
+    // Letters
+    for (ch, key) in [
+        ('a', Key::KEY_Q), ('b', Key::KEY_B), ('c', Key::KEY_C), ('d', Key::KEY_D),
+        ('e', Key::KEY_E), ('f', Key::KEY_F), ('g', Key::KEY_G), ('h', Key::KEY_H),
+        ('i', Key::KEY_I), ('j', Key::KEY_J), ('k', Key::KEY_K), ('l', Key::KEY_L),
+        ('m', Key::KEY_SEMICOLON), ('n', Key::KEY_N), ('o', Key::KEY_O), ('p', Key::KEY_P),
+        ('q', Key::KEY_A), ('r', Key::KEY_R), ('s', Key::KEY_S), ('t', Key::KEY_T),
+        ('u', Key::KEY_U), ('v', Key::KEY_V), ('w', Key::KEY_Z), ('x', Key::KEY_X),
+        ('y', Key::KEY_Y), ('z', Key::KEY_W),
+    ] {
+        m.insert(ch, (key, false));
+        m.insert(ch.to_ascii_uppercase(), (key, true));
+    }
+
+    // Punctuation
+    for (ch, key, shift) in [
+        (',', Key::KEY_M, false), (';', Key::KEY_COMMA, false), (':', Key::KEY_DOT, false),
+        ('!', Key::KEY_SLASH, false), ('?', Key::KEY_M, true), ('.', Key::KEY_COMMA, true),
+        ('/', Key::KEY_DOT, true),
+    ] {
+        m.insert(ch, (key, shift));
+    }
+
+    // Number row
+    for (ch_normal, ch_shift, key) in [
+        ('&', '1', Key::KEY_1), ('é', '2', Key::KEY_2), ('"', '3', Key::KEY_3),
+        ('\'', '4', Key::KEY_4), ('(', '5', Key::KEY_5), ('-', '6', Key::KEY_6),
+        ('è', '7', Key::KEY_7), ('_', '8', Key::KEY_8), ('ç', '9', Key::KEY_9),
+        ('à', '0', Key::KEY_0),
+    ] {
+        m.insert(ch_normal, (key, false));
+        m.insert(ch_shift, (key, true));
+    }
+
+    // Extra
+    for (ch, key, shift) in [
+        (')', Key::KEY_MINUS, false), ('°', Key::KEY_MINUS, true),
+        ('=', Key::KEY_EQUAL, false), ('+', Key::KEY_EQUAL, true),
+        ('ù', Key::KEY_APOSTROPHE, false), ('%', Key::KEY_APOSTROPHE, true),
+        ('*', Key::KEY_BACKSLASH, false), ('$', Key::KEY_RIGHTBRACE, false),
+        ('£', Key::KEY_RIGHTBRACE, true), ('<', Key::KEY_102ND, false),
+        ('>', Key::KEY_102ND, true),
+    ] {
+        m.insert(ch, (key, shift));
+    }
+
+    m
+}
+
+fn qwerty_map() -> HashMap<char, (Key, bool)> {
+    let mut m = common_map();
+
+    // Letters (same physical position = same keycode on QWERTY)
+    for (ch, key) in [
+        ('a', Key::KEY_A), ('b', Key::KEY_B), ('c', Key::KEY_C), ('d', Key::KEY_D),
+        ('e', Key::KEY_E), ('f', Key::KEY_F), ('g', Key::KEY_G), ('h', Key::KEY_H),
+        ('i', Key::KEY_I), ('j', Key::KEY_J), ('k', Key::KEY_K), ('l', Key::KEY_L),
+        ('m', Key::KEY_M), ('n', Key::KEY_N), ('o', Key::KEY_O), ('p', Key::KEY_P),
+        ('q', Key::KEY_Q), ('r', Key::KEY_R), ('s', Key::KEY_S), ('t', Key::KEY_T),
+        ('u', Key::KEY_U), ('v', Key::KEY_V), ('w', Key::KEY_W), ('x', Key::KEY_X),
+        ('y', Key::KEY_Y), ('z', Key::KEY_Z),
+    ] {
+        m.insert(ch, (key, false));
+        m.insert(ch.to_ascii_uppercase(), (key, true));
+    }
+
+    // Number row
+    for (ch, key) in [
+        ('1', Key::KEY_1), ('2', Key::KEY_2), ('3', Key::KEY_3), ('4', Key::KEY_4),
+        ('5', Key::KEY_5), ('6', Key::KEY_6), ('7', Key::KEY_7), ('8', Key::KEY_8),
+        ('9', Key::KEY_9), ('0', Key::KEY_0),
+    ] {
+        m.insert(ch, (key, false));
+    }
+
+    // Punctuation
+    for (ch, key, shift) in [
+        ('.', Key::KEY_DOT, false), (',', Key::KEY_COMMA, false),
+        (';', Key::KEY_SEMICOLON, false), (':', Key::KEY_SEMICOLON, true),
+        ('/', Key::KEY_SLASH, false), ('?', Key::KEY_SLASH, true),
+        ('\'', Key::KEY_APOSTROPHE, false), ('"', Key::KEY_APOSTROPHE, true),
+        ('-', Key::KEY_MINUS, false), ('_', Key::KEY_MINUS, true),
+        ('=', Key::KEY_EQUAL, false), ('+', Key::KEY_EQUAL, true),
+        ('!', Key::KEY_1, true), ('@', Key::KEY_2, true),
+        ('#', Key::KEY_3, true), ('$', Key::KEY_4, true),
+        ('%', Key::KEY_5, true), ('&', Key::KEY_7, true),
+        ('*', Key::KEY_8, true), ('(', Key::KEY_9, true),
+        (')', Key::KEY_0, true), ('[', Key::KEY_LEFTBRACE, false),
+        (']', Key::KEY_RIGHTBRACE, false), ('<', Key::KEY_COMMA, true),
+        ('>', Key::KEY_DOT, true),
+    ] {
+        m.insert(ch, (key, shift));
+    }
+
+    m
+}
+
+fn qwertz_map() -> HashMap<char, (Key, bool)> {
+    let mut m = common_map();
+
+    // Letters (QWERTZ: Y and Z swapped vs QWERTY)
+    for (ch, key) in [
+        ('a', Key::KEY_A), ('b', Key::KEY_B), ('c', Key::KEY_C), ('d', Key::KEY_D),
+        ('e', Key::KEY_E), ('f', Key::KEY_F), ('g', Key::KEY_G), ('h', Key::KEY_H),
+        ('i', Key::KEY_I), ('j', Key::KEY_J), ('k', Key::KEY_K), ('l', Key::KEY_L),
+        ('m', Key::KEY_M), ('n', Key::KEY_N), ('o', Key::KEY_O), ('p', Key::KEY_P),
+        ('q', Key::KEY_Q), ('r', Key::KEY_R), ('s', Key::KEY_S), ('t', Key::KEY_T),
+        ('u', Key::KEY_U), ('v', Key::KEY_V), ('w', Key::KEY_W), ('x', Key::KEY_X),
+        ('y', Key::KEY_Z), ('z', Key::KEY_Y),
+    ] {
+        m.insert(ch, (key, false));
+        m.insert(ch.to_ascii_uppercase(), (key, true));
+    }
+
+    // Number row
+    for (ch, key) in [
+        ('1', Key::KEY_1), ('2', Key::KEY_2), ('3', Key::KEY_3), ('4', Key::KEY_4),
+        ('5', Key::KEY_5), ('6', Key::KEY_6), ('7', Key::KEY_7), ('8', Key::KEY_8),
+        ('9', Key::KEY_9), ('0', Key::KEY_0),
+    ] {
+        m.insert(ch, (key, false));
+    }
+
+    // Punctuation
+    for (ch, key, shift) in [
+        ('.', Key::KEY_DOT, false), (',', Key::KEY_COMMA, false),
+        ('-', Key::KEY_SLASH, false), ('_', Key::KEY_SLASH, true),
+        (';', Key::KEY_COMMA, true), (':', Key::KEY_DOT, true),
+        ('!', Key::KEY_1, true), ('"', Key::KEY_2, true),
+        ('\'', Key::KEY_BACKSLASH, true), ('?', Key::KEY_MINUS, true),
+        ('+', Key::KEY_RIGHTBRACE, false), ('*', Key::KEY_RIGHTBRACE, true),
+        ('(', Key::KEY_8, true), (')', Key::KEY_9, true),
+        ('=', Key::KEY_0, true), ('<', Key::KEY_102ND, false),
+        ('>', Key::KEY_102ND, true),
+    ] {
+        m.insert(ch, (key, shift));
+    }
+
+    m
 }

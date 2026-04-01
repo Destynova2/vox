@@ -22,9 +22,43 @@ struct Cli {
     #[arg(short, long, default_value = "turbo-int8")]
     model: String,
 
+    /// Toggle key name (e.g. grave, f9, pause, scrolllock). Use --debug-keys to find yours.
+    #[arg(short, long, default_value = "grave")]
+    key: String,
+
     /// Debug mode: print all key events
     #[arg(long)]
     debug_keys: bool,
+}
+
+fn parse_key(name: &str) -> Result<Key> {
+    let upper = format!("KEY_{}", name.to_uppercase());
+    // Match against common key names
+    let key = match upper.as_str() {
+        "KEY_GRAVE" => Key::KEY_GRAVE,
+        "KEY_F1" => Key::KEY_F1,
+        "KEY_F2" => Key::KEY_F2,
+        "KEY_F3" => Key::KEY_F3,
+        "KEY_F4" => Key::KEY_F4,
+        "KEY_F5" => Key::KEY_F5,
+        "KEY_F6" => Key::KEY_F6,
+        "KEY_F7" => Key::KEY_F7,
+        "KEY_F8" => Key::KEY_F8,
+        "KEY_F9" => Key::KEY_F9,
+        "KEY_F10" => Key::KEY_F10,
+        "KEY_F11" => Key::KEY_F11,
+        "KEY_F12" => Key::KEY_F12,
+        "KEY_PAUSE" => Key::KEY_PAUSE,
+        "KEY_SCROLLLOCK" => Key::KEY_SCROLLLOCK,
+        "KEY_INSERT" => Key::KEY_INSERT,
+        "KEY_RIGHTCTRL" => Key::KEY_RIGHTCTRL,
+        "KEY_RIGHTALT" => Key::KEY_RIGHTALT,
+        "KEY_CAPSLOCK" => Key::KEY_CAPSLOCK,
+        "KEY_NUMLOCK" => Key::KEY_NUMLOCK,
+        "KEY_102ND" => Key::KEY_102ND,
+        _ => anyhow::bail!("unknown key: {name} — use --debug-keys to find the right name"),
+    };
+    Ok(key)
 }
 
 fn main() -> Result<()> {
@@ -34,6 +68,9 @@ fn main() -> Result<()> {
         return keys::debug_keys();
     }
 
+    let toggle_key = parse_key(&cli.key)?;
+    let layout = uinput::Layout::detect();
+
     let model_config = models::ModelConfig::from_name(&cli.model);
     let m = models::ensure_models(&model_config)?;
 
@@ -41,7 +78,7 @@ fn main() -> Result<()> {
     let whisper = stt::Whisper::new(&m.encoder, &m.decoder, &m.tokens, &cli.language)
         .context("failed to load whisper")?;
 
-    eprintln!("[vox] ready — press ² to start/stop dictation");
+    eprintln!("[vox] ready — press {} to start/stop dictation", cli.key);
 
     ctrlc::set_handler(|| {
         tray::set_idle();
@@ -55,7 +92,7 @@ fn main() -> Result<()> {
     let tx = Arc::new(std::sync::Mutex::new(tx));
 
     std::thread::spawn(move || {
-        if let Err(e) = keys::listen_toggle(Key::KEY_GRAVE, move |pressed| {
+        if let Err(e) = keys::listen_toggle(toggle_key, move |pressed| {
             if pressed {
                 uinput::send_backspace();
                 let was_recording = recording_key.fetch_xor(true, Ordering::SeqCst);
@@ -102,7 +139,7 @@ fn main() -> Result<()> {
                     match whisper.transcribe(&samples) {
                         Ok(text) if !text.is_empty() => {
                             eprintln!("\x1b[92m> {text}\x1b[0m");
-                            if let Err(e) = uinput::type_text(&text) {
+                            if let Err(e) = uinput::type_text(&text, &layout) {
                                 eprintln!("[type] error: {e}");
                             }
                         }
