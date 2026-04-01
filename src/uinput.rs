@@ -43,11 +43,15 @@ fn emit_key(key: Key, press: bool) -> Result<()> {
 
 /// Send a backspace to erase the ² character that leaked through.
 pub fn send_backspace() {
-    if get_or_create().is_err() {
+    if let Err(e) = get_or_create() {
+        eprintln!("[uinput] backspace failed: {e}");
         return;
     }
-    let _ = emit_key(Key::KEY_BACKSPACE, true);
-    let _ = emit_key(Key::KEY_BACKSPACE, false);
+    if let Err(e) = emit_key(Key::KEY_BACKSPACE, true)
+        .and_then(|_| emit_key(Key::KEY_BACKSPACE, false))
+    {
+        eprintln!("[uinput] backspace failed: {e}");
+    }
 }
 
 /// Type text character by character via uinput (AZERTY layout).

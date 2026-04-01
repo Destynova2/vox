@@ -18,16 +18,6 @@ pub struct ModelConfig {
 }
 
 impl ModelConfig {
-    pub fn turbo() -> Self {
-        Self {
-            name: "turbo-int8".into(),
-            base_url: "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo/resolve/main".into(),
-            encoder_file: "turbo-encoder.int8.onnx".into(),
-            decoder_file: "turbo-decoder.int8.onnx".into(),
-            tokens_file: "turbo-tokens.txt".into(),
-        }
-    }
-
     pub fn from_name(name: &str) -> Self {
         // Extract base name (e.g. "small", "turbo", "medium")
         // and detect int8 suffix
