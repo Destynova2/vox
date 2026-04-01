@@ -17,14 +17,14 @@ impl Whisper {
     ) -> Result<Self> {
         let mut config = OfflineRecognizerConfig::default();
         config.model_config.whisper = OfflineWhisperModelConfig {
-            encoder: Some(encoder.to_str().unwrap().into()),
-            decoder: Some(decoder.to_str().unwrap().into()),
+            encoder: Some(encoder.to_str().context("encoder path not UTF-8")?.into()),
+            decoder: Some(decoder.to_str().context("decoder path not UTF-8")?.into()),
             language: Some(language.into()),
             task: Some("transcribe".into()),
             tail_paddings: -1,
             ..Default::default()
         };
-        config.model_config.tokens = Some(tokens.to_str().unwrap().into());
+        config.model_config.tokens = Some(tokens.to_str().context("tokens path not UTF-8")?.into());
         config.model_config.num_threads = 4;
         config.model_config.debug = false;
 
